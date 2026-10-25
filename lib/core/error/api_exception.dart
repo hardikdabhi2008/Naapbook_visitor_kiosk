@@ -31,9 +31,6 @@ class ApiException implements Exception {
   final Map<String, String> fields;
   final Map<String, dynamic>? body;
 
-  /// A timed-out POST may still have been applied by the server.
-  bool get outcomeUnknown => kind == FailureKind.timeout;
-
   factory ApiException.from(Object error) {
     if (error is ApiException) return error;
     if (error is DioException) {

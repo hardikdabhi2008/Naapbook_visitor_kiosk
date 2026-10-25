@@ -71,8 +71,6 @@ class SubmitController extends Notifier<SubmitState> {
   @override
   SubmitState build() => const SubmitState();
 
-  void dismissError() => state = const SubmitState();
-
   /// Returns the created visitor, or null on failure (see [state].error).
   Future<Visitor?> submit() async {
     if (state.busy) return null;
