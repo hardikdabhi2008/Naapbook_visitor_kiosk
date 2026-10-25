@@ -1,0 +1,9 @@
+﻿On-device full flow (automated) - integration_test/full_flow_test.dart
+Device : Redmi Note 13 Pro+ 5G (23090RA98I), Android 16 (API 36), arm64, 1220x2712 px
+Mode   : debug test build, live mock API (latency + ~5% HTTP 500) via adb reverse tcp:4000
+Command: flutter test integration_test/full_flow_test.dart -d AQZPIZAMZT55OJS4 --dart-define=API_BASE_URL=http://localhost:4000
+
+LAYOUT: single-pane (phone) Size(1220.0, 2712.0)
+00:00 +0: full kiosk flow against the live mock API
+01:14 +1: (tearDownAll)
+01:15 +1: All tests passed!

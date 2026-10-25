@@ -2,8 +2,10 @@
 
 Flutter 3.47.7 / Dart 3.13.5. One codebase for Android tablet and Flutter web.
 
-> **Status note.** Everything below marked ✅ was run and verified. Items marked ⏳ need an Android device or SDK that was not
-> available where this was built; the exact steps to produce them are given. I have not invented numbers for them.
+> **Status note.** Everything marked ✅ was run and verified; every number comes from a real run (device named where it
+> matters). Items marked ⏳ or described as *not verified* were not done — chiefly the camera photo path, a DevTools
+> frame-chart *screenshot* (the numeric profile-mode summary is measured), and any Android emulator or low-end tablet. I have
+> not invented numbers for them.
 
 ## 1. How to run
 
@@ -80,13 +82,34 @@ presentation depends on repository *interfaces* through providers, which is how 
 
 | Item | Value |
 |---|---|
-| Web build size | ✅ `build/web` = 40.8 MB total, of which `canvaskit/` = 37 MB (variants fetched on demand, not all downloaded); `main.dart.js` = **3.30 MB** (release, tree-shaken icons: Material 1.6 MB → 10 KB) |
+| Web build size | ✅ `build/web` = 42 MB total, of which `canvaskit/` = 37 MB (variants fetched on demand, not all downloaded); `main.dart.js` = **3.30 MB** (release, tree-shaken icons: Material 1.6 MB → 10 KB). The two bundled Noto fonts add ~1.3 MB of assets. |
 | Web renderer | ✅ **CanvasKit** (the default for `flutter build web` on 3.47; the HTML renderer no longer exists). A Wasm dry-run succeeded, so `--wasm` (skwasm) is an option. |
-| Release APK size | ✅ `build/app/outputs/flutter-apk/app-release.apk` = **54.8 MB** (fat APK, all ABIs; `--split-per-abi` would be smaller). Built with Android Studio's JDK because `JAVA_HOME` pointed at JDK 8; `android/gradle.properties` sets `kotlin.incremental=false` because the project (F:) and pub cache (C:) are on different drive roots. |
-| DevTools frame chart, visitors list scroll | ⏳ Needs a profile-mode run on a named device. Procedure: `flutter run --profile -d <device>`, open DevTools → Performance, fling the Today's visitors list, screenshot the frame chart into `evidence/`, and write the device name here. **Debug-mode numbers are not accepted by the brief and I have not supplied any.** |
+| Release APK size | ✅ `build/app/outputs/flutter-apk/app-release.apk` = **55.5 MB** (fat APK, all ABIs; `--split-per-abi` would be smaller). Built with Android Studio's JDK because `JAVA_HOME` pointed at JDK 8; `android/gradle.properties` sets `kotlin.incremental=false` because the project (F:) and pub cache (C:) are on different drive roots. |
+| Visitors list scroll, **profile mode** | ✅ measured on a real device, see below |
 
-What I expect to see and why (hypothesis to confirm, not a measurement): rows are plain `Column`/`Row`/`Text` widgets with no
-`saveLayer`-triggering effects (no opacity layers, shadows or clipping per row), pages are 50 items, and rows have stable keys.
+**Visitors list scroll — profile mode, Redmi Note 13 Pro+ 5G (model 23090RA98I), Android 16, arm64, 120 Hz display, real mock API**
+
+`flutter drive --profile --no-dds -d <device> --driver=test_driver/perf_driver.dart --target=integration_test/scroll_perf_test.dart`
+flings Today's visitors down and back up 12 times each way (more pages load from the API while scrolling). Summary file:
+[`evidence/perf/visitors_scroll.timeline_summary.json`](evidence/perf/visitors_scroll.timeline_summary.json).
+
+| Metric (125 frames) | Build (UI thread) | Raster |
+|---|---|---|
+| Average | **3.3 ms** | **7.7 ms** |
+| 90th percentile | 5.7 ms | 10.4 ms |
+| 99th percentile | 26.0 ms | 15.6 ms |
+| Worst | 57.7 ms | 17.4 ms |
+| Frames over the tool's budget | 2 of 125 | 1 of 124 |
+
+Reading it: typical frames are cheap on both threads, and raster (the thread B1 is about) never exceeded 17.4 ms. The slow tail
+is on the **build** side: 2 frames over budget and a 57.7 ms worst frame. I have not identified which frame that was; my
+hypothesis is the rebuild when a new page of 50 rows arrives from the API, but I have not confirmed it. GC: 2 young + 2 old
+collections, 11 ms total UI GC time. GPU memory ~174 MB average.
+
+This is the `flutter drive` timeline summary — the same trace data DevTools reads — **not a DevTools screenshot**. The raw 9 MB
+trace (`visitors_scroll.timeline.json`) is git-ignored; open it in <https://ui.perfetto.dev> or re-run the command above. A
+DevTools frame-chart screenshot can still be added: `scripts/run-android -Mode profile`, then DevTools → Performance.
+Only one device was measured; I have **not** measured a low-end tablet, where the raster numbers would matter more.
 
 ## 4. Golden tests ✅
 
@@ -111,7 +134,7 @@ Caveat: the overflow tests use the test font, which is wider than nothing but no
 metrics. Layouts use `Wrap`/`Expanded`/scrollable parents rather than fixed heights so they do not depend on exact metrics, but
 please also check on a real device (Settings → Display → Font size → largest).
 
-## 5. Screenshots ✅ (web) / ⏳ (Android device)
+## 5. Screenshots and end-to-end runs ✅ (web, Android phone) / ⏳ (camera, emulator, tablet)
 
 `integration_test/full_flow_test.dart` drives the whole kiosk in real Chrome against the **live mock API** (300–1500 ms latency,
 5 % random 500s, with auto-Retry like a guard would): app start → half-filled form survives a simulated process kill → host
@@ -135,8 +158,9 @@ debug build): they prove behaviour, not performance. `scripts/e2e-web.ps1` / `.s
 **Android:** the emulator on the build machine cannot start (no hypervisor driver; needs Windows Hypervisor Platform and a
 reboot). Instead the debug build was installed on a real **Redmi Note 13 Pro+ (Android 16)** over USB, with the API reached
 through `adb reverse tcp:4000 tcp:4000`, and exercised by hand (check-in, badge, visitors, admin, host status, Hindi/Gujarati).
-Still to do on a device: the automated run (`flutter test integration_test/full_flow_test.dart -d <device>`), the profile-mode
-frame chart, and camera capture / `retrieveLostData()` — none of these have been verified.
+**The automated full flow also passed on that phone** (`flutter test integration_test/full_flow_test.dart -d <device>`, single-pane
+phone layout, 1220×2712 px, live mock API; log in `evidence/device-full-flow.txt`). The profile-mode scroll numbers are in §3.
+Still not verified: camera capture and `retrieveLostData()` (the test does not take a photo), and any low-end tablet.
 
 ## 6. Assumptions and what I deliberately did not build
 
@@ -169,7 +193,7 @@ frame chart, and camera capture / `retrieveLostData()` — none of these have be
 
 **Not built, and why**
 - Brand colour is a palette of 8, not a free colour picker — fewer dependencies, easier to keep accessible contrast.
-- No automated on-device (Android) run and no profile-mode frame chart yet — the emulator cannot start here; the phone was only exercised by hand (section 5).
+- No Android emulator or low-end-tablet run — the emulator cannot start on the build machine, and only one phone (Redmi Note 13 Pro+) was measured.
 - No verification of the camera / `retrieveLostData()` recovery path. It is implemented but **untested**.
 - No search on the Today's visitors list. It was built (client-side filter that paged in the whole day) and then removed on request.
 - No iOS/desktop targets — not requested.

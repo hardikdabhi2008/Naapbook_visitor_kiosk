@@ -54,3 +54,6 @@ app.*.map.json
 *.jks
 *.keystore
 key.properties
+
+# raw profile trace (9 MB); the summary JSON is kept
+/evidence/perf/*.timeline.json

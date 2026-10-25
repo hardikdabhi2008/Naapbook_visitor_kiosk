@@ -2,15 +2,13 @@
 
 ## B1. UI thread 8 ms, raster thread 40 ms on a low-cost tablet
 
-This is a **raster-bound (GPU/rasterisation) problem, not a Dart/build problem.** The UI thread finishes in 8 ms, well inside
-the 16.6 ms budget, but the raster thread takes 40 ms to turn the layer tree into pixels, so frames are dropped (~25 fps).
-Likely causes: (1) `saveLayer` calls from `Opacity`, `ShaderMask`, `ClipRRect` with `antiAlias`, `BackdropFilter` or large
-blurred shadows inside list rows; (2) oversized images decoded at full resolution and scaled down on the GPU (e.g. photo
-thumbnails with no `cacheWidth`/`cacheHeight`); (3) shader compilation jank on first use, or heavy overdraw from stacked
-opaque backgrounds on a weak GPU.
-**First check:** run in profile mode on that tablet with DevTools → Performance → *Enhance Tracing* and "Show raster cache
-checkerboard / Highlight offscreen layers" on; the `saveLayer` hot spots show up directly. Fix the worst offender (usually
-remove/replace the layer-forcing widget or add `cacheWidth`), then re-measure. I would not touch `build()` code first — the UI
+This is a **raster-bound (GPU) problem, not a Dart/build problem.** The UI thread finishes in 8 ms (budget 16.6 ms) but the
+raster thread needs 40 ms to turn the layer tree into pixels, so frames drop (~25 fps): the weak tablet GPU is the bottleneck.
+Likely causes: (1) `saveLayer` from `Opacity`, `ShaderMask`, `ClipRRect` with `antiAlias`, `BackdropFilter` or large blurred
+shadows inside rows; (2) oversized images decoded at full size and scaled on the GPU (no `cacheWidth`/`cacheHeight`);
+(3) shader-compilation jank on first use, or overdraw from stacked opaque backgrounds.
+**First check:** profile mode on that tablet, DevTools → Performance with *Enhance Tracing* and "Highlight offscreen layers";
+the `saveLayer` hot spots show up directly. Fix the worst one, then re-measure. I would not touch `build()` first — the UI
 thread numbers say it is not the problem.
 
 ## B2. Overflow stripes in Gujarati at large font, English fine
@@ -58,12 +56,11 @@ a kiosk draft contains personal data, so I'd add an expiry (e.g. discard drafts 
 
 ## B6. Admin web app 9 MB, 12 s on mid-range phone over 4G, on IIS
 
-Measure first (Lighthouse / Network tab), then in order of payoff: (1) **Enable compression on IIS** — static gzip and/or
-Brotli (`<urlCompression doStaticCompression="true" />`, add the `application/wasm`, `.js`, `.json`, `.otf` types); Flutter
-output compresses ~3–4×, which alone is most of the gain. (2) **Fix MIME types and caching:** register `.wasm`, `.json`, `.otf`
-etc. so IIS doesn't 404 them, and set long `Cache-Control` for hashed/static assets while keeping `index.html`, `flutter_bootstrap.js`
-and `flutter_service_worker.js` no-cache; add the SPA URL-Rewrite rule so deep links work. (3) **Shrink the payload:** release
-build, tree-shaken icons (default), drop unused packages and big fonts/images, split rarely used admin screens into
-**deferred components** (`deferred as`), and use the `skwasm`/Wasm build or self-host CanvasKit instead of fetching it from the
-CDN. (4) Add a lightweight HTML splash so the user sees something while it loads, and serve over HTTP/2. If the admin screens
-are mostly forms and tables, consider whether a Flutter web app is the right tool at all, but that is a bigger decision.
+Measure first (Lighthouse / Network tab), then in order of payoff: (1) **Enable compression on IIS** — static gzip/Brotli
+(`<urlCompression doStaticCompression="true" />`, include `application/wasm`, `.js`, `.json`, `.otf`); Flutter output compresses
+~3–4×, which alone is most of the gain. (2) **MIME types and caching:** register `.wasm`, `.json`, `.otf` so IIS doesn't 404
+them; long `Cache-Control` on static assets but no-cache on `index.html`, `flutter_bootstrap.js` and `flutter_service_worker.js`;
+add the SPA URL-Rewrite rule so deep links work. (3) **Shrink the payload:** release build, tree-shaken icons (default), drop
+unused packages/fonts/images, split rarely used admin screens into **deferred components** (`deferred as`), use the Wasm build
+or self-host CanvasKit instead of the CDN. (4) Add an HTML splash and serve over HTTP/2. If the admin is mostly forms and
+tables, ask whether Flutter web is the right tool at all — a bigger decision.
