@@ -1,0 +1,31 @@
+FAIL  semantics tree exposed (0 labelled nodes)
+FAIL  tablet/web: directory and form both on screen
+FAIL  could not find "Search by name or department"
+FAIL  search applied (host count label present)
+FAIL  could not find "Full name"
+FAIL  could not find "Mobile number"
+FAIL  could not find "Purpose of visit"
+FAIL  could not find "Meeting"
+FAIL  could not find "Choose photo"
+FAIL  file chooser did not open
+FAIL  could not find "Check in"
+FAIL  submit blocked without consent
+FAIL  could not find "I agree"
+FAIL  half-filled form restored after full page reload
+FAIL  photo restored after reload
+FAIL  check-in succeeded -> badge screen
+FAIL  badge has QR code with accessible label
+FAIL  badge shows countdown
+PASS  idle (20s default) returned to home
+PASS  form cleared after successful check-in
+PASS  visitors screen loaded
+PASS  undo snackbar shown after check-out
+PASS  Undo tapped
+FAIL  could not find "Enter 4-digit PIN"
+FAIL  PIN 1234 unlocks admin
+PASS  language switched to Gujarati immediately
+FAIL  could not find "हिन्दी"
+PASS  phone: single pane (directory not beside form)
+FAIL  could not find "Visitors"
+
+console errors:

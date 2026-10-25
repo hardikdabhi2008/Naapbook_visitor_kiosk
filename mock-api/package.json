@@ -1,0 +1,13 @@
+{
+  "name": "naapbooks-flutter-mock-api",
+  "version": "1.0.0",
+  "description": "Mock visitor API for the Naapbooks Flutter practical assessment",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "MOCK_LATENCY=off MOCK_FAILURE_RATE=0 node server.js"
+  },
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED",
+  "private": true
+}
