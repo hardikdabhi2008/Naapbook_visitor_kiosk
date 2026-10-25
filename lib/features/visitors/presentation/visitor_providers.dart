@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/error/api_exception.dart';
 import '../../../core/network/api_client.dart';
 import '../data/visitor_repository_impl.dart';
 import '../domain/usecases.dart';
@@ -17,9 +18,45 @@ final checkOutVisitorProvider = Provider<CheckOutVisitor>(
   (ref) => CheckOutVisitor(ref.watch(visitorRepositoryProvider)),
 );
 
-final purposesProvider = FutureProvider<List<Purpose>>(
-  (ref) => ref.watch(visitorRepositoryProvider).fetchPurposes(),
-);
+/// The purpose dropdown's options. The form is unusable without them, and this is
+/// a plain GET (safe to repeat), so a transient failure — the API fails ~5% of
+/// calls on purpose, or the connection blips — is retried quietly up to 3 times
+/// before the field shows its error with a Retry button.
+final purposesProvider = FutureProvider<List<Purpose>>((ref) async {
+  final repo = ref.watch(visitorRepositoryProvider);
+  for (var attempt = 1;; attempt++) {
+    try {
+      return await repo.fetchPurposes();
+    } catch (e) {
+      final kind = ApiException.from(e).kind;
+      final transient = kind == FailureKind.server ||
+          kind == FailureKind.network ||
+          kind == FailureKind.timeout;
+      if (attempt >= 3 || !transient || !ref.mounted) rethrow;
+      await Future<void>.delayed(Duration(milliseconds: 400 * attempt));
+    }
+  }
+});
+
+/// Visitors checked in from this kiosk, newest first.
+///
+/// The API lists visitors by their time, and a day's data can contain later
+/// times than "now", so a fresh check-in may land pages down the list and look
+/// as if it was never saved. These are kept on top of Today's visitors instead
+/// (and de-duplicated if the server page also contains them).
+class RecentCheckIns extends Notifier<List<Visitor>> {
+  @override
+  List<Visitor> build() => const [];
+
+  void add(Visitor v) => state = [v, ...state.where((x) => x.id != v.id)];
+
+  /// Keeps the pinned copy in step after a check-out.
+  void update(Visitor v) =>
+      state = [for (final x in state) x.id == v.id ? v : x];
+}
+
+final recentCheckInsProvider =
+    NotifierProvider<RecentCheckIns, List<Visitor>>(RecentCheckIns.new);
 
 class VisitorFilter extends Notifier<VisitorStatus?> {
   @override
@@ -71,7 +108,19 @@ class VisitorsController extends AsyncNotifier<VisitorsState> {
     final page = await ref
         .read(visitorRepositoryProvider)
         .fetchVisitors(status: filter);
-    return VisitorsState(items: page.items, nextCursor: page.nextCursor);
+    return VisitorsState(
+        items: _withRecent(page.items, filter), nextCursor: page.nextCursor);
+  }
+
+  /// Puts this kiosk's own check-ins (matching the status filter) on top.
+  List<Visitor> _withRecent(List<Visitor> pageItems, VisitorStatus? filter) {
+    final recent = [
+      for (final v in ref.read(recentCheckInsProvider))
+        if (filter == null || v.status == filter) v,
+    ];
+    if (recent.isEmpty) return pageItems;
+    final ids = {for (final v in recent) v.id};
+    return [...recent, ...pageItems.where((v) => !ids.contains(v.id))];
   }
 
   /// Pull-to-refresh. On failure the current list is kept and the error is
@@ -82,8 +131,8 @@ class VisitorsController extends AsyncNotifier<VisitorsState> {
         .read(visitorRepositoryProvider)
         .fetchVisitors(status: filter);
     if (ref.read(visitorFilterProvider) != filter) return;
-    state = AsyncData(
-        VisitorsState(items: page.items, nextCursor: page.nextCursor));
+    state = AsyncData(VisitorsState(
+        items: _withRecent(page.items, filter), nextCursor: page.nextCursor));
   }
 
   Future<void> loadMore() async {
@@ -119,7 +168,13 @@ class VisitorsController extends AsyncNotifier<VisitorsState> {
   //   2b. commitCheckOut - POST /checkout; restore the row if that fails
 
   /// Removes [v] from the list and returns the index it occupied.
+  ///
+  /// If [v] was checked in from this kiosk, its host is freed straight away
+  /// (the Check-in page shows them Available again) instead of waiting out the
+  /// undo window; [undoCheckOut] or a failed commit puts the host back.
   int stageCheckOut(Visitor v) {
+    ref.read(recentCheckInsProvider.notifier).update(
+        v.copyWith(status: VisitorStatus.checkedOut, checkOutAt: DateTime.now()));
     final s = state.value;
     if (s == null) return 0;
     final i = s.items.indexWhere((x) => x.id == v.id);
@@ -128,16 +183,21 @@ class VisitorsController extends AsyncNotifier<VisitorsState> {
     return i;
   }
 
-  void undoCheckOut(Visitor v, int index) => _put(v, index);
+  void undoCheckOut(Visitor v, int index) {
+    ref.read(recentCheckInsProvider.notifier).update(v); // host is busy again
+    _put(v, index);
+  }
 
   /// Throws on failure after restoring the row.
   Future<void> commitCheckOut(Visitor v, int index) async {
     try {
       final updated = await ref.read(checkOutVisitorProvider)(v.id);
+      ref.read(recentCheckInsProvider.notifier).update(updated);
       // Under the "all" filter the row stays, now as checked out. Under a
       // status filter it no longer belongs, so it stays removed.
       if (ref.read(visitorFilterProvider) == null) _put(updated, index);
     } catch (_) {
+      ref.read(recentCheckInsProvider.notifier).update(v); // still checked in
       _put(v, index);
       rethrow;
     }

@@ -96,10 +96,11 @@ The test environment draws text with the Ahem font (solid blocks), which is deli
 
 Regenerate: `flutter test --update-goldens test/badge_golden_test.dart`.
 
-Other tests (38 run + 5 live-API tests that skip without the server; all pass with `flutter test`):
+Other tests (50 run in total with the goldens, + 5 live-API tests that skip without the server; all pass with `flutter test`):
+- `safe_area_test.dart` — the badge's Done button stays above a simulated Android navigation bar (edge-to-edge).
 - `overflow_test.dart` — check-in form, two-pane check-in, visitors, admin PIN and badge at **text scale 2.0 in English, Hindi and
   Gujarati** (phone 360 px wide; two-pane at 1280 px). No overflow exceptions.
-- `app_flow_test.dart` — whole app with fake repositories: host picker + debounced search → form → check-in → badge → touch resets countdown → idle returns home and the form is cleared; hosts error → Retry; undo sends nothing / lapse sends exactly one check-out; swipe to check out; admin PIN gate, brand colour, dark mode and language applied immediately and persisted; submit failures (500 → Retry, timeout → duplicate warning, then success); tablet two-pane; every tab at 200% font in en/hi/gu on phone and tablet widths.
+- `app_flow_test.dart` — whole app with fake repositories: host picker + debounced search → form → check-in → badge → touch resets countdown → idle returns home and the form is cleared; hosts error → Retry; undo sends nothing / lapse sends exactly one check-out; swipe to check out; admin PIN gate, brand colour, dark mode and language applied immediately and persisted; submit failures (500 → Retry, timeout → duplicate warning, then success); empty-form submit shows every required message (purpose included); a new check-in is pinned at the top of Today's visitors; host status flips to Unavailable on check-in and back to Available on check-out (immediately, undo restores it); an unavailable host shows an error and blocks check-in; purposes load retries quietly and shows a clear message when the server is unreachable; tablet two-pane; every tab at 200% font in en/hi/gu on phone and tablet widths.
 - `flow_test.dart` — draft restore from storage, write-through while typing, submit blocked without consent/with bad mobile.
 - `live_api_test.dart` — real repositories against the running mock API (hosts, purposes, paging without duplicates, status
   filter, check-in with photo → check-out → 409 handled, 422 field errors). Skipped unless `LIVE_API=1`:
@@ -131,9 +132,11 @@ Run: `node server.js` (mock API), start chromedriver on 4444, then
 These are **debug-mode web builds** (the DEBUG ribbon is hidden by `debugShowCheckedModeBanner: false`, but it is still a
 debug build): they prove behaviour, not performance. `scripts/e2e-web.ps1` / `.sh` wraps all of the above in one command.
 
-**Not verified on a real Android device or emulator.** The emulator on the build machine cannot start (no hypervisor driver; needs
-Windows Hypervisor Platform and a reboot) and no phone was attached. The same test file runs on a device with
-`flutter test integration_test/full_flow_test.dart -d <device>`; camera capture and `retrieveLostData()` stay untested until then.
+**Android:** the emulator on the build machine cannot start (no hypervisor driver; needs Windows Hypervisor Platform and a
+reboot). Instead the debug build was installed on a real **Redmi Note 13 Pro+ (Android 16)** over USB, with the API reached
+through `adb reverse tcp:4000 tcp:4000`, and exercised by hand (check-in, badge, visitors, admin, host status, Hindi/Gujarati).
+Still to do on a device: the automated run (`flutter test integration_test/full_flow_test.dart -d <device>`), the profile-mode
+frame chart, and camera capture / `retrieveLostData()` — none of these have been verified.
 
 ## 6. Assumptions and what I deliberately did not build
 
@@ -151,14 +154,28 @@ Windows Hypervisor Platform and a reboot) and no phone was attached. The same te
 - Check-in photos are resized to ≤800 px / quality 75 by the picker, and rejected locally if the data URL would exceed ~2.8 MB.
 - Admin PIN is a constant (`1234`) per the brief; no PIN change screen. The admin area re-locks when you leave it or reload.
 - Badge QR encodes the `badgeCode` (e.g. `NBV-4K9Q2X`).
+- **A new check-in is pinned at the top of Today's visitors.** The API sorts by time and its seeded day has later times than "now",
+  so a fresh check-in landed on page 12 and looked lost. Pinned entries are de-duplicated against server pages.
+- **Host availability is tracked by the kiosk.** The API's `available` flag is fixed seed data nothing can change, so a host with
+  a visitor checked in from this kiosk shows **Unavailable**, and **Available** again as soon as that visitor is checked out
+  (immediately, not after the undo window; Undo puts it back). It lives in memory, so a restart/reload resets it, and the 2,000
+  seeded visitors deliberately do not affect hosts (it would mark nearly every host unavailable).
+- **An unavailable host can be picked but not checked in to:** the form shows "*Name* is unavailable right now. Please choose
+  another host." on the Host field and blocks submit until another host is chosen. (My reading of the request; a warning-only
+  behaviour is a one-line change.)
+- **Purposes load retries quietly** (3 attempts, GET only — safe to repeat) before showing its error with Retry; hosts and
+  visitors keep the visible error + Retry the brief asks for.
+- Full-screen pages outside the tab shell (badge, host picker) use `SafeArea`, since Android 15+ draws edge-to-edge.
 
 **Not built, and why**
 - Brand colour is a palette of 8, not a free colour picker — fewer dependencies, easier to keep accessible contrast.
-- No on-device (Android) integration run — no working emulator or phone was available; the web integration run is in section 5.
-- No Android emulator verification of the camera / `retrieveLostData()` recovery path. It is implemented but **untested**.
+- No automated on-device (Android) run and no profile-mode frame chart yet — the emulator cannot start here; the phone was only exercised by hand (section 5).
+- No verification of the camera / `retrieveLostData()` recovery path. It is implemented but **untested**.
+- No search on the Today's visitors list. It was built (client-side filter that paged in the whole day) and then removed on request.
 - No iOS/desktop targets — not requested.
 - Hindi/Gujarati strings are my own translations and should be reviewed by a native speaker.
-- Web: Hindi/Gujarati glyphs come from the browser's fallback font download under CanvasKit; no bundled font. Offline first load would show boxes.
+- Hindi/Gujarati glyphs: CanvasKit's runtime fallback-font download failed in testing (empty boxes), so **Noto Sans Devanagari and
+  Noto Sans Gujarati are bundled** (`assets/fonts/`, SIL OFL, ~1.3 MB) and set as theme fallbacks. This adds that weight to the app/web size.
 
 ## 7. What I used AI for
 

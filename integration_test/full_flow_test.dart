@@ -205,6 +205,9 @@ void main() {
     await shot('08-visitors');
     final tip = (checkoutBtn.evaluate().first.widget as Tooltip).message!;
     final name = tip.substring('Check out: '.length);
+    // The visitor we just checked in must be the first row, even though the real
+    // API sorts a check-in made "now" far down the day's list.
+    expect(name, 'Riya Patel', reason: 'new check-in is pinned at the top of Today\'s visitors');
 
     await tester.ensureVisible(checkoutBtn.first);
     await tester.pump(const Duration(milliseconds: 300));

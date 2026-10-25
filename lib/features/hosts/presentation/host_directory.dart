@@ -158,6 +158,8 @@ class HostTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(checkinProvider.select((d) => d.hostId == host.id));
+    // Busy with a visitor checked in from this kiosk => shown as Unavailable.
+    final busy = ref.watch(busyHostIdsProvider.select((ids) => ids.contains(host.id)));
     final scheme = Theme.of(context).colorScheme;
     final theme = Theme.of(context).textTheme;
 
@@ -201,7 +203,7 @@ class HostTile extends ConsumerWidget {
                       children: [
                         Text(context.tr('floor_label', {'f': host.floor}),
                             style: theme.bodySmall),
-                        _Availability(available: host.available),
+                        _Availability(available: host.available && !busy),
                       ],
                     ),
                   ],

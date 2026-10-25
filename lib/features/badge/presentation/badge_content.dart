@@ -40,8 +40,10 @@ class BadgeContent extends StatelessWidget {
         if ((visitor.company ?? '').isNotEmpty)
           Text(visitor.company!, style: theme.textTheme.titleMedium),
         const SizedBox(height: 8),
-        Text(context.tr('badge_visiting', {'host': visitor.hostName}),
-            style: theme.textTheme.titleMedium),
+        Text(
+          context.tr('badge_visiting', {'host': visitor.hostName}),
+          style: theme.textTheme.titleMedium,
+        ),
       ],
     );
 
@@ -52,7 +54,8 @@ class BadgeContent extends StatelessWidget {
           image: true,
           label: context.tr('qr_label', {'code': visitor.badgeCode}),
           child: Container(
-            color: Colors.white, // QR needs a light quiet zone, even in dark mode
+            color:
+                Colors.white, // QR needs a light quiet zone, even in dark mode
             padding: const EdgeInsets.all(12),
             child: ExcludeSemantics(
               child: QrImageView(
@@ -64,63 +67,86 @@ class BadgeContent extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Text(context.tr('badge_code', {'code': visitor.badgeCode}),
-            style: theme.textTheme.titleMedium),
+        Text(
+          context.tr('badge_code', {'code': visitor.badgeCode}),
+          style: theme.textTheme.titleMedium,
+        ),
       ],
     );
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
-          child: Column(
-            children: [
-              const _SuccessMark(),
-              const SizedBox(height: 8),
-              Semantics(
-                header: true,
-                liveRegion: true,
-                child: Text(context.tr('badge_welcome'),
+    // This page sits outside the home shell, so nothing else keeps its last
+    // control clear of the system navigation bar / gesture area (edge-to-edge
+    // on Android 15+). The app bar already handles the top inset.
+    return SafeArea(
+      top: false,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: Column(
+              children: [
+                const _SuccessMark(),
+                const SizedBox(height: 8),
+                Semantics(
+                  header: true,
+                  liveRegion: true,
+                  child: Text(
+                    context.tr('badge_welcome'),
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.titleLarge),
-              ),
-              const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: LayoutBuilder(builder: (context, c) {
-                    if (c.maxWidth >= 600) {
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(child: details),
-                          const SizedBox(width: 24),
-                          qr,
-                        ],
-                      );
-                    }
-                    return Column(children: [
-                      Align(alignment: AlignmentDirectional.centerStart, child: details),
-                      const SizedBox(height: 20),
-                      qr,
-                    ]);
-                  }),
+                    style: theme.textTheme.titleLarge,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Text(context.tr('returning', {'n': secondsLeft}),
-                  textAlign: TextAlign.center, style: theme.textTheme.bodyLarge),
-              const SizedBox(height: 8),
-              ExcludeSemantics(
-                child: LinearProgressIndicator(
-                  value: totalSeconds == 0 ? 0 : secondsLeft / totalSeconds,
-                  color: scheme.primary,
+                const SizedBox(height: 16),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: LayoutBuilder(
+                      builder: (context, c) {
+                        if (c.maxWidth >= 600) {
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: details),
+                              const SizedBox(width: 24),
+                              qr,
+                            ],
+                          );
+                        }
+                        return Column(
+                          children: [
+                            Align(
+                              alignment: AlignmentDirectional.centerStart,
+                              child: details,
+                            ),
+                            const SizedBox(height: 20),
+                            qr,
+                          ],
+                        );
+                      },
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              FilledButton(onPressed: onDone, child: Text(context.tr('done'))),
-            ],
+                const SizedBox(height: 16),
+                Text(
+                  context.tr('returning', {'n': secondsLeft}),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 8),
+                ExcludeSemantics(
+                  child: LinearProgressIndicator(
+                    value: totalSeconds == 0 ? 0 : secondsLeft / totalSeconds,
+                    color: scheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: onDone,
+                  child: Text(context.tr('done')),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -139,26 +165,33 @@ class _PhotoBox extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     Widget placeholder() => Container(
-          width: 140,
-          height: 140,
-          color: scheme.surfaceContainerHighest,
-          child: Semantics(
-            label: context.tr('no_photo'),
-            child: Icon(Icons.person, size: 72, color: scheme.outline),
-          ),
-        );
+      width: 140,
+      height: 140,
+      color: scheme.surfaceContainerHighest,
+      child: Semantics(
+        label: context.tr('no_photo'),
+        child: Icon(Icons.person, size: 72, color: scheme.outline),
+      ),
+    );
 
     Widget child;
     if (photo != null) {
-      child = Image.memory(photo!,
-          width: 140, height: 140, fit: BoxFit.cover, semanticLabel: label);
+      child = Image.memory(
+        photo!,
+        width: 140,
+        height: 140,
+        fit: BoxFit.cover,
+        semanticLabel: label,
+      );
     } else if (photoUrl != null) {
-      child = Image.network(photoUrl!,
-          width: 140,
-          height: 140,
-          fit: BoxFit.cover,
-          semanticLabel: label,
-          errorBuilder: (_, _, _) => placeholder());
+      child = Image.network(
+        photoUrl!,
+        width: 140,
+        height: 140,
+        fit: BoxFit.cover,
+        semanticLabel: label,
+        errorBuilder: (_, _, _) => placeholder(),
+      );
     } else {
       child = placeholder();
     }
@@ -171,14 +204,17 @@ class _SuccessMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ExcludeSemantics(
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: 1),
-          duration: const Duration(milliseconds: 700),
-          curve: Curves.elasticOut,
-          builder: (context, t, child) =>
-              Transform.scale(scale: t.clamp(0.0, 1.4), child: child),
-          child: Icon(Icons.check_circle,
-              size: 72, color: Theme.of(context).colorScheme.primary),
-        ),
-      );
+    child: TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 700),
+      curve: Curves.elasticOut,
+      builder: (context, t, child) =>
+          Transform.scale(scale: t.clamp(0.0, 1.4), child: child),
+      child: Icon(
+        Icons.check_circle,
+        size: 72,
+        color: Theme.of(context).colorScheme.primary,
+      ),
+    ),
+  );
 }

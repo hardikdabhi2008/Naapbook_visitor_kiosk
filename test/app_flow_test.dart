@@ -10,6 +10,7 @@ import 'package:naapbooks_visitor_kiosk/features/hosts/presentation/host_directo
 import 'package:naapbooks_visitor_kiosk/features/hosts/presentation/host_providers.dart';
 import 'package:naapbooks_visitor_kiosk/features/visitors/domain/visitor.dart';
 import 'package:naapbooks_visitor_kiosk/features/visitors/presentation/visitor_providers.dart';
+import 'package:naapbooks_visitor_kiosk/features/visitors/presentation/visitors_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'helpers.dart';
@@ -31,6 +32,60 @@ class SpyVisitors extends FakeVisitorRepo {
     checkIns++;
     lastNew = visitor;
     return super.checkIn(visitor);
+  }
+}
+
+/// Like the real API's seeded day: a check-in made "now" is NOT on page 1 of
+/// the list (it sorts further down), and checking in returns a brand-new visitor.
+class NewPersonVisitors extends SpyVisitors {
+  Visitor _make(NewVisitorLike v, VisitorStatus status) => Visitor(
+        id: 'v_new',
+        name: v.name,
+        mobile: v.mobile,
+        company: null,
+        purposeId: 'meeting',
+        hostId: v.hostId,
+        hostName: 'Aarav Shah 1',
+        status: status,
+        checkInAt: DateTime(2026, 10, 24, 12),
+        checkOutAt: status == VisitorStatus.checkedOut ? DateTime(2026, 10, 24, 13) : null,
+        expectedAt: DateTime(2026, 10, 24, 12),
+        hasPhoto: false,
+        badgeCode: 'NBV-NEW123',
+        consent: true,
+      );
+
+  late NewVisitorLike _created;
+
+  @override
+  Future<Visitor> checkIn(NewVisitor visitor) async {
+    checkIns++;
+    lastNew = visitor;
+    _created = (name: visitor.name, mobile: visitor.mobile, hostId: visitor.hostId);
+    return _make(_created, VisitorStatus.checkedIn);
+  }
+
+  @override
+  Future<Visitor> checkOut(String id) async {
+    checkOuts++;
+    if (id != 'v_new') return super.checkOut(id);
+    return _make(_created, VisitorStatus.checkedOut);
+  }
+}
+
+typedef NewVisitorLike = ({String name, String mobile, String hostId});
+
+/// The purposes request fails [failures] times (with [kind]) before it succeeds.
+class FlakyPurposes extends SpyVisitors {
+  FlakyPurposes(this.failures, {this.kind = FailureKind.server});
+  final int failures;
+  final FailureKind kind;
+  int calls = 0;
+
+  @override
+  Future<List<Purpose>> fetchPurposes() async {
+    if (calls++ < failures) throw ApiException(kind);
+    return super.fetchPurposes();
   }
 }
 
@@ -62,6 +117,7 @@ Future<(ProviderContainer, SpyVisitors, FlakyHosts)> boot(
   Size size = const Size(390, 1500),
   Map<String, Object> prefs = const {},
   double textScale = 1.0,
+  SpyVisitors? visitorsRepo,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -71,7 +127,7 @@ Future<(ProviderContainer, SpyVisitors, FlakyHosts)> boot(
 
   SharedPreferences.setMockInitialValues(prefs);
   final p = await SharedPreferences.getInstance();
-  final visitors = SpyVisitors();
+  final visitors = visitorsRepo ?? SpyVisitors();
   final hosts = FlakyHosts();
   final container = ProviderContainer(
     retry: (_, _) => null,
@@ -111,9 +167,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
     expect(find.text('11 hosts'), findsOneWidget); // Shah 1, Shah 10..19
-    await tester.tap(find.byType(HostTile).first);
+    await tester.tap(find.widgetWithText(HostTile, 'Aarav Shah 12')); // an available host
     await tester.pumpAndSettle();
-    expect(find.text('Aarav Shah 1'), findsOneWidget); // now in the form
+    expect(find.text('Aarav Shah 12'), findsOneWidget); // now in the form
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Full name'), 'Riya Patel');
     await tester.enterText(find.widgetWithText(TextFormField, 'Mobile number'), '9876543210');
@@ -129,7 +185,7 @@ void main() {
 
     expect(visitors.checkIns, 1);
     expect(visitors.lastNew!.mobile, '9876543210');
-    expect(visitors.lastNew!.hostId, 'h_1');
+    expect(visitors.lastNew!.hostId, 'h_12');
     expect(find.text("You're checked in"), findsOneWidget);
     expect(find.textContaining('Returning to home in'), findsOneWidget);
 
@@ -144,6 +200,185 @@ void main() {
     expect(find.widgetWithText(TextFormField, 'Full name'), findsOneWidget);
     // Form was cleared after the successful submit.
     expect(find.text('Riya Patel'), findsNothing);
+  });
+
+  testWidgets('submitting an empty form shows every required-field message, purpose included',
+      (tester) async {
+    final (_, visitors, _) = await boot(tester, size: const Size(390, 2000));
+    await tester.tap(find.widgetWithText(FilledButton, 'Check in'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter your name (2–80 characters).'), findsOneWidget);
+    expect(find.text('Enter a valid 10-digit mobile number starting with 6–9.'), findsOneWidget);
+    expect(find.text('Choose a purpose.'), findsOneWidget, reason: 'purpose dropdown error');
+    expect(find.text('Choose a host.'), findsOneWidget);
+    expect(find.text('Consent is required.'), findsOneWidget);
+    expect(visitors.checkIns, 0);
+
+    // Picking a purpose clears just that message.
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Meeting').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Choose a purpose.'), findsNothing);
+  });
+
+  testWidgets('a new check-in shows at the top of Today\'s visitors, even if the server sorts it lower',
+      (tester) async {
+    final (_, visitors, hosts) = await boot(tester,
+        visitorsRepo: NewPersonVisitors(),
+        prefs: {
+          'draft.fields':
+              '{"name":"Sneha Test","mobile":"9876543210","purposeId":"meeting","hostId":"h_2","hostName":"Aarav Shah 2","consent":true}',
+        });
+    hosts.calls = 1;
+    await tester.tap(find.widgetWithText(FilledButton, 'Check in'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(visitors.checkIns, 1);
+    expect(find.text("You're checked in"), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Done'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Visitors'));
+    await tester.pumpAndSettle();
+
+    final tiles = tester.widgetList<VisitorTile>(find.byType(VisitorTile)).toList();
+    expect(tiles.first.visitor.name, 'Sneha Test',
+        reason: 'new check-in is pinned on top; list = ${tiles.map((t) => t.visitor.name).toList()}');
+    expect(tiles.first.visitor.status, VisitorStatus.checkedIn);
+    expect(tiles.map((t) => t.visitor.name), contains('Riya Patel'),
+        reason: 'the rest of the day is still listed below');
+    expect(tiles.where((t) => t.visitor.id == 'v_new').length, 1, reason: 'no duplicate');
+
+    // Checking the pinned visitor out keeps the row, now as Checked out.
+    await tester.tap(find.byTooltip('Check out: Sneha Test'));
+    await pumpFor(tester, const Duration(seconds: 7));
+    await tester.pumpAndSettle();
+    expect(visitors.checkOuts, 1);
+    final after = tester.widgetList<VisitorTile>(find.byType(VisitorTile)).first.visitor;
+    expect(after.name, 'Sneha Test');
+  });
+
+  testWidgets('host status flips to Unavailable after a check-in and back after check-out',
+      (tester) async {
+    await boot(tester,
+        size: const Size(1280, 1400),
+        visitorsRepo: NewPersonVisitors(),
+        prefs: {
+          'draft.fields':
+              '{"name":"Sneha Test","mobile":"9876543210","purposeId":"meeting","hostId":"h_2","hostName":"Aarav Shah 2","consent":true}',
+        });
+    // The directory's first load fails on purpose in this fake; retry it.
+    await tester.tap(find.widgetWithText(FilledButton, 'Retry'));
+    await tester.pumpAndSettle();
+
+    Finder status(String text) =>
+        find.descendant(of: find.byKey(const ValueKey('h_2')), matching: find.text(text));
+    expect(status('Available'), findsOneWidget, reason: 'h_2 starts available');
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Check in'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text("You're checked in"), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Done'));
+    await tester.pumpAndSettle();
+    expect(status('Unavailable'), findsOneWidget, reason: 'host is busy with the new visitor');
+    expect(status('Available'), findsNothing);
+
+    // Other hosts are untouched.
+    expect(
+        find.descendant(of: find.byKey(const ValueKey('h_4')), matching: find.text('Available')),
+        findsOneWidget);
+
+    // Checking the visitor out frees the host AT ONCE, not after the undo window.
+    await tester.tap(find.text('Visitors'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Check out: Sneha Test'));
+    await tester.pump(const Duration(milliseconds: 500)); // well inside the 5 s window
+    await tester.tap(find.text('Check-in'));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(status('Available'), findsOneWidget, reason: 'freed immediately on check-out');
+    expect(status('Unavailable'), findsNothing);
+
+    // Undo (the snackbar is still showing) makes the host busy again.
+    await tester.tap(find.text('Undo'));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(status('Unavailable'), findsOneWidget, reason: 'undo restores the busy status');
+
+    // A check-out that is allowed to complete leaves the host free.
+    await tester.tap(find.text('Visitors'));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.tap(find.byTooltip('Check out: Sneha Test'));
+    await pumpFor(tester, const Duration(seconds: 7)); // window lapses, server call done
+    await tester.tap(find.text('Check-in'));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(status('Available'), findsOneWidget, reason: 'host stays free once checked out');
+  });
+
+  testWidgets('choosing an unavailable host shows an error and blocks check-in until another host is chosen',
+      (tester) async {
+    final (_, visitors, _) = await boot(tester,
+        size: const Size(1280, 1400),
+        prefs: {
+          'draft.fields':
+              '{"name":"Sneha Test","mobile":"9876543210","purposeId":"meeting","consent":true}',
+        });
+    await tester.tap(find.widgetWithText(FilledButton, 'Retry')); // first host load fails on purpose
+    await tester.pumpAndSettle();
+
+    const unavailableMsg = 'Aarav Shah 1 is unavailable right now. Please choose another host.';
+    expect(find.text(unavailableMsg), findsNothing);
+
+    // h_1 is marked unavailable in the fake host data.
+    await tester.tap(find.byKey(const ValueKey('h_1')));
+    await tester.pumpAndSettle();
+    expect(find.text(unavailableMsg), findsOneWidget, reason: 'shown as soon as it is picked');
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Check in'));
+    await tester.pumpAndSettle();
+    expect(visitors.checkIns, 0, reason: 'check-in is blocked for an unavailable host');
+    expect(find.text("You're checked in"), findsNothing);
+    expect(find.text(unavailableMsg), findsOneWidget);
+
+    // An available host (h_2) clears the error and the check-in goes through.
+    await tester.tap(find.byKey(const ValueKey('h_2')));
+    await tester.pumpAndSettle();
+    expect(find.text(unavailableMsg), findsNothing);
+    await tester.tap(find.widgetWithText(FilledButton, 'Check in'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(visitors.checkIns, 1);
+    expect(visitors.lastNew!.hostId, 'h_2');
+    expect(find.text("You're checked in"), findsOneWidget);
+  });
+
+  testWidgets('purposes: transient failures are retried quietly and the dropdown still loads',
+      (tester) async {
+    final repo = FlakyPurposes(2); // two 500s, then success
+    await boot(tester, size: const Size(390, 2000), visitorsRepo: repo);
+    await tester.pump(const Duration(seconds: 3)); // 400 ms + 800 ms back-off
+    await tester.pumpAndSettle();
+    expect(repo.calls, 3);
+    expect(find.text("Couldn't load purposes."), findsNothing);
+    expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
+  });
+
+  testWidgets('purposes: when the server cannot be reached, say so and offer Retry',
+      (tester) async {
+    final repo = FlakyPurposes(100, kind: FailureKind.network); // never recovers
+    await boot(tester, size: const Size(390, 2000), visitorsRepo: repo);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(repo.calls, 3, reason: 'gives up after 3 attempts');
+    expect(find.text("Can't reach the server. Check your connection."), findsOneWidget);
+    final retry = find.widgetWithText(TextButton, 'Retry');
+    expect(retry, findsOneWidget);
+
+    // Retry asks again (3 more attempts) and the error stays until it works.
+    await tester.tap(retry);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(repo.calls, 6);
   });
 
   testWidgets('restored banner shows only for the startup draft, not after Clear',
@@ -164,7 +399,7 @@ void main() {
       (tester) async {
     final (container, visitors, hosts) = await boot(tester, prefs: {
       'draft.fields':
-          '{"name":"Riya Patel","mobile":"9876543210","purposeId":"meeting","hostId":"h_1","hostName":"Aarav Shah 1","consent":true}',
+          '{"name":"Riya Patel","mobile":"9876543210","purposeId":"meeting","hostId":"h_2","hostName":"Aarav Shah 2","consent":true}',
     });
     hosts.calls = 1;
     final failing = FailingVisitors(const ApiException(FailureKind.server));

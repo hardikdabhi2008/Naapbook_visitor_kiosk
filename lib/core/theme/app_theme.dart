@@ -16,12 +16,18 @@ class AppTheme {
     Color(0xFF37474F),
   ];
 
+  /// Bundled fonts for the non-Latin UI languages (see pubspec.yaml).
+  static const fontFallback = <String>['NotoSansDevanagari', 'NotoSansGujarati'];
+
   static ThemeData build(Color seed, Brightness brightness) {
     final scheme = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
     const minTarget = Size(64, 48);
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
+      // Latin text keeps the platform font; Devanagari / Gujarati glyphs fall
+      // through to these bundled fonts, so they never render as empty boxes.
+      fontFamilyFallback: fontFallback,
       materialTapTargetSize: MaterialTapTargetSize.padded,
       inputDecorationTheme: const InputDecorationTheme(
         border: OutlineInputBorder(),

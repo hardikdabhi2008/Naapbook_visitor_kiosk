@@ -42,7 +42,7 @@ flutter run -d chrome
 
 ```bash
 flutter analyze                    # static analysis — clean
-flutter test                       # 43 unit/widget/golden tests (fake repositories, no API needed)
+flutter test                       # 50 unit/widget/golden tests (fake repositories, no API needed)
 ```
 
 **Automated full flow in a real browser, against the real mock API** (phone 390×844, tablet 1280×800, web 1440×900):
@@ -119,5 +119,5 @@ evidence/                screenshots
 | Gradle: `UnknownHostException` / Kotlin errors on first Android build | Use JDK 17+ (Android Studio's `jbr`); first build downloads the NDK (~1 GB) |
 | Kotlin "different roots" incremental-cache error | Already handled: `kotlin.incremental=false` in `android/gradle.properties` |
 | Emulator: "hypervisor ... not supported" | Enable Windows Hypervisor Platform / install AEHD, or use a USB device |
-| `e2e-web` can't find Chrome | Install Chrome; ChromeDriver is fetched automatically |
+| Phone shows "Can't reach the server" / "Couldn't load purposes" | The USB tunnel to the API dropped (it is cleared whenever the cable reconnects or the install session ends). Run `adb reverse tcp:4000 tcp:4000` (or `scripts/run-android`), keep the cable connected, then tap Retry |`r`n| `e2e-web` can't find Chrome | Install Chrome; ChromeDriver is fetched automatically |
 | `e2e-web` fails once on a step that waits for data | The mock API fails ~5% of calls on purpose and the test auto-taps Retry, but an unlucky streak or a slow machine can still time out. Re-run that size (`-Sizes '1280,800'`). In my runs every size passed, but one tablet run failed once on the host list and passed on the immediate rerun |

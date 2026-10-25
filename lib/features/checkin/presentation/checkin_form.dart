@@ -10,6 +10,7 @@ import '../../../core/error/api_exception.dart';
 import '../../../core/l10n/app_strings.dart';
 import '../../../core/utils/validators.dart';
 import '../../hosts/presentation/host_directory.dart';
+import '../../hosts/presentation/host_providers.dart';
 import '../../visitors/presentation/visitor_providers.dart';
 import '../domain/checkin_draft.dart';
 import 'checkin_providers.dart';
@@ -96,6 +97,8 @@ class _CheckinFormState extends ConsumerState<CheckinForm> {
     final d = ref.read(checkinProvider);
     final valid = _formKey.currentState!.validate();
     if (!valid || d.purposeId == null || d.hostId == null || !d.consent) return;
+    // An unavailable host's error is already shown on the Host field.
+    if (ref.read(selectedHostUnavailableProvider)) return;
 
     final visitor = await ref.read(submitProvider.notifier).submit();
     // The user may have left the screen while the request was in flight.
@@ -112,6 +115,7 @@ class _CheckinFormState extends ConsumerState<CheckinForm> {
       _syncController(_company, next.company);
     });
     final submit = ref.watch(submitProvider);
+    final hostUnavailable = ref.watch(selectedHostUnavailableProvider);
     final notifier = ref.read(checkinProvider.notifier);
     final restored = notifier.restored;
     final scheme = Theme.of(context).colorScheme;
@@ -195,6 +199,7 @@ class _CheckinFormState extends ConsumerState<CheckinForm> {
           const SizedBox(height: 16),
           _HostField(
             draft: draft,
+            unavailable: hostUnavailable,
             showError: _attempted,
             onPick: widget.onPickHost,
             useHero: widget.useHero,
@@ -260,7 +265,10 @@ class _PurposeField extends ConsumerWidget {
       error: (e, _) => InputDecorator(
         decoration: InputDecoration(
           labelText: context.tr('field_purpose'),
-          errorText: context.tr('purposes_failed'),
+          // Say why when it is a connection problem, not just "couldn't load".
+          errorText: ApiException.from(e).kind == FailureKind.network
+              ? context.tr('err_network')
+              : context.tr('purposes_failed'),
         ),
         child: Align(
           alignment: AlignmentDirectional.centerStart,
@@ -276,7 +284,10 @@ class _PurposeField extends ConsumerWidget {
         initialValue: purposes.any((p) => p.id == value) ? value : null,
         isExpanded: true,
         onChanged: onChanged,
-        validator: (v) => showError && v == null ? context.tr('v_purpose') : null,
+        // Not gated on [showError]: Form.validate() runs in the same frame that
+        // _submit sets _attempted, before this closure is rebuilt, so a gated
+        // validator would never report the error on the first tap.
+        validator: (v) => v == null ? context.tr('v_purpose') : null,
         autovalidateMode: AutovalidateMode.onUserInteraction,
         decoration: InputDecoration(labelText: context.tr('field_purpose')),
         items: [
@@ -294,12 +305,17 @@ class _PurposeField extends ConsumerWidget {
 class _HostField extends StatelessWidget {
   const _HostField({
     required this.draft,
+    required this.unavailable,
     required this.showError,
     required this.onPick,
     required this.useHero,
   });
 
   final CheckinDraft draft;
+
+  /// The chosen host can't be visited right now; shown as an error at once,
+  /// not only after a submit attempt.
+  final bool unavailable;
   final bool showError;
   final VoidCallback? onPick;
   final bool useHero;
@@ -309,6 +325,9 @@ class _HostField extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final hasHost = draft.hostId != null;
     final error = showError && !hasHost;
+    final errorText = hasHost && unavailable
+        ? context.tr('host_unavailable', {'name': draft.hostName!})
+        : (error ? context.tr('v_host') : null);
 
     Widget? avatar;
     if (hasHost) {
@@ -326,7 +345,7 @@ class _HostField extends StatelessWidget {
     return InputDecorator(
       decoration: InputDecoration(
         labelText: context.tr('field_host'),
-        errorText: error ? context.tr('v_host') : null,
+        errorText: errorText,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       ),
       child: InkWell(

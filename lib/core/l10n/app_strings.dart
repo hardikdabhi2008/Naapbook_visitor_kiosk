@@ -102,6 +102,7 @@ const _en = <String, String>{
   'v_mobile': 'Enter a valid 10-digit mobile number starting with 6–9.',
   'v_purpose': 'Choose a purpose.',
   'v_host': 'Choose a host.',
+  'host_unavailable': '{name} is unavailable right now. Please choose another host.',
   'v_consent': 'Consent is required.',
   'timeout_note':
       "The request timed out — the visitor may already be checked in. Check Today's visitors before trying again.",
@@ -185,6 +186,7 @@ const _hi = <String, String>{
   'v_mobile': '6–9 से शुरू होने वाला सही 10 अंकों का मोबाइल नंबर दर्ज करें।',
   'v_purpose': 'उद्देश्य चुनें।',
   'v_host': 'होस्ट चुनें।',
+  'host_unavailable': '{name} अभी उपलब्ध नहीं हैं। कृपया दूसरा होस्ट चुनें।',
   'v_consent': 'सहमति आवश्यक है।',
   'timeout_note':
       'अनुरोध का समय समाप्त हो गया — विज़िटर चेक-इन हो चुका हो सकता है। दोबारा प्रयास से पहले आज के आगंतुक देखें।',
@@ -268,6 +270,7 @@ const _gu = <String, String>{
   'v_mobile': '6–9 થી શરૂ થતો સાચો 10 અંકનો મોબાઇલ નંબર દાખલ કરો.',
   'v_purpose': 'હેતુ પસંદ કરો.',
   'v_host': 'હોસ્ટ પસંદ કરો.',
+  'host_unavailable': '{name} હાલમાં ઉપલબ્ધ નથી. કૃપા કરીને બીજો હોસ્ટ પસંદ કરો.',
   'v_consent': 'સંમતિ જરૂરી છે.',
   'timeout_note':
       'વિનંતીનો સમય પૂરો થયો — વિઝિટર કદાચ ચેક-ઇન થઈ ગયો હશે. ફરી પ્રયાસ કરતાં પહેલાં આજના મુલાકાતીઓ તપાસો.',

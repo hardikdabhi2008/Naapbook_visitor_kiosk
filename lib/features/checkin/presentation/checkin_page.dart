@@ -56,12 +56,17 @@ class HostPickerPage extends ConsumerWidget {
           ),
         ],
       ),
-      body: HostDirectory(
-        useHero: true,
-        onSelected: (host) {
-          ref.read(checkinProvider.notifier).setHost(host);
-          context.pop();
-        },
+      // Full-screen page outside the home shell: keep the last rows clear of the
+      // system navigation bar (the app bar covers the top).
+      body: SafeArea(
+        top: false,
+        child: HostDirectory(
+          useHero: true,
+          onSelected: (host) {
+            ref.read(checkinProvider.notifier).setHost(host);
+            context.pop();
+          },
+        ),
       ),
     );
   }

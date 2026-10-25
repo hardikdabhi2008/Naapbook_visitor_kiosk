@@ -44,6 +44,23 @@ class Visitor {
   final bool consent;
 
   bool get canCheckOut => status == VisitorStatus.checkedIn;
+
+  Visitor copyWith({VisitorStatus? status, DateTime? checkOutAt}) => Visitor(
+        id: id,
+        name: name,
+        mobile: mobile,
+        company: company,
+        purposeId: purposeId,
+        hostId: hostId,
+        hostName: hostName,
+        status: status ?? this.status,
+        checkInAt: checkInAt,
+        checkOutAt: checkOutAt ?? this.checkOutAt,
+        expectedAt: expectedAt,
+        hasPhoto: hasPhoto,
+        badgeCode: badgeCode,
+        consent: consent,
+      );
 }
 
 class VisitorPage {

@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+  import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -83,7 +83,9 @@ class SubmitController extends Notifier<SubmitState> {
       ref.read(lastCheckInProvider.notifier).set(visitor, draft.photo);
       await ref.read(checkinProvider.notifier).clear();
       state = const SubmitState();
-      // Today's list is now stale.
+      // Today's list is now stale. Pin the new visitor on top of it first: the
+      // server may sort a check-in made "now" far down the day's list.
+      ref.read(recentCheckInsProvider.notifier).add(visitor);
       ref.invalidate(visitorsProvider);
       return visitor;
     } catch (e) {
